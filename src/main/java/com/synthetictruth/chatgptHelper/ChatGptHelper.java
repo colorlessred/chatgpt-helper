@@ -59,6 +59,14 @@ public class ChatGptHelper {
         }
     }
 
+    private void println(String message) {
+        System.out.println(message);
+    }
+
+    private void println(String format, String... values) {
+        System.out.println(String.format(format, values));
+    }
+
     private void run() throws Exception {
         OkHttpClient client = new OkHttpClient();
 
@@ -76,7 +84,7 @@ public class ChatGptHelper {
 
         prompt = String.format("%s %s", TYPE_CARD_PREFIX, prompt);
 
-        System.out.printf("Prompt: %s", prompt);
+        System.out.printf("Prompt: %s\n", prompt);
 
         ChatGptRequest chatGptRequest = ChatGptRequest.builder()
                 .model(MODEL)
@@ -95,7 +103,7 @@ public class ChatGptHelper {
                 .addHeader("Content-Type", "application/json")
                 .build();
 
-        System.out.printf("Calling the ChatGTP API");
+        println("Calling the ChatGTP API");
         try (Response response = client.newCall(request).execute()) {
             String responseBody = response.body().string();
             System.out.println(responseBody);
@@ -106,6 +114,7 @@ public class ChatGptHelper {
                     Files.write(Path.of(outputFile),
                             reply.getBytes(),
                             StandardOpenOption.CREATE);
+                    println("output written to file %s", outputFile);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -113,5 +122,7 @@ public class ChatGptHelper {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+
+
     }
 }
