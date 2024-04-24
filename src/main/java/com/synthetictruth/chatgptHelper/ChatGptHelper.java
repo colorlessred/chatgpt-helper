@@ -4,16 +4,33 @@ import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.google.gson.Gson;
+import com.synthetictruth.chatgptHelper.ChatGptCompletion.Choice;
+import com.synthetictruth.chatgptHelper.MdCardWriter.Card;
+import lombok.extern.java.Log;
 import okhttp3.*;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
+@Log
 public class ChatGptHelper {
 
-    private final String TYPE_CARD_PREFIX = "create multiple anki cards (removing the eventual cloze). The back card should have minimal information that allows for clear and concise answers. Don't add information on how to create Anki cards in general. Here's the content to be turned into cards: ";
+    private final String TYPE_CARD_PREFIX = //
+            """
+                    create multiple anki cards (removing the eventual cloze).
+                    The back card should have minimal information that allows for clear and concise answers.
+                    Don't add information on how to create Anki cards in general.
+                    Use a --- separator to separate the cards.
+                    Here's the content to be turned into cards:
+
+                    """;
     private final String KEY_ENV_VARIABLE = "OPENAI_API_KEY";
 
     // from https://platform.openai.com/docs/quickstart?context=curl
@@ -26,6 +43,8 @@ public class ChatGptHelper {
     private final String MODEL_GPT3 = "gpt-3.5-turbo-0125";
     private final String MODEL = MODEL_GPT4;
 
+    private final SimpleDateFormat TIMESTAMP_FORMAT = new SimpleDateFormat("yyyyMMdd_HHmmss");
+
     @Parameter(names = {"-t", "--type"})
     private String type;
 
@@ -37,6 +56,9 @@ public class ChatGptHelper {
 
     @Parameter(names = {"-o", "--outputFile"})
     private String outputFile;
+
+    @Parameter(names = {"-f", "--outputFolder"})
+    private String outputFolder;
 
     public static void main(String[] args) {
         ChatGptHelper chatGptHelper = new ChatGptHelper();
@@ -55,16 +77,20 @@ public class ChatGptHelper {
         }
 
         if (chatGptHelper.outputFile == null) {
-            throw new ParameterException("must the --outputFile (-o)");
+            throw new ParameterException("must specify the --outputFile (-o)");
+        }
+
+        if (chatGptHelper.outputFolder == null) {
+            throw new ParameterException("must specify the --outputFolder (-f)");
         }
     }
 
     private void println(String message) {
-        System.out.println(message);
+        log.info(message);
     }
 
     private void println(String format, String... values) {
-        System.out.println(String.format(format, values));
+        log.info(String.format(format, values));
     }
 
     private void run() throws Exception {
@@ -108,21 +134,31 @@ public class ChatGptHelper {
             String responseBody = response.body().string();
             System.out.println(responseBody);
             ChatGptCompletion val = ChatGptCompletion.fromString(responseBody);
-            val.getChoices().stream().findFirst().ifPresent(choice -> {
-                String reply = choice.getMessage().content;
-                try {
-                    Files.write(Path.of(outputFile),
-                            reply.getBytes(),
-                            StandardOpenOption.CREATE);
-                    println("output written to file %s", outputFile);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            });
+            Optional<Choice> reply = val.getChoices().stream().findFirst();
+            if (reply.isPresent()) {
+                processResponse(reply.get().getMessage().content);
+            }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
 
+    private void processResponse(String response) throws IOException {
+        // write out the file with the multiple answers
+        Files.write(Path.of(outputFile),
+                response.getBytes(),
+                StandardOpenOption.CREATE);
+        println("output written to file %s", outputFile);
 
+        // split the response into multiple files
+        AtomicInteger index = new AtomicInteger(1);
+        String timestamp = TIMESTAMP_FORMAT.format(new Date());
+        List<Card> cards = MdCardWriter.parseSource(response);
+        for (Card card : cards) {
+            Path path = Path.of(outputFolder).resolve(String.format("%s_%d.md", timestamp, index.getAndIncrement()));
+            log.info(String.format("Writing card '%s' to path %s", card.getFront(), path.toAbsolutePath()));
+            println("Writing card '%s' to path %s", card.getFront(), path.toAbsolutePath().toString());
+            Files.write(path, card.getContent().getBytes(), StandardOpenOption.CREATE);
+        }
     }
 }
