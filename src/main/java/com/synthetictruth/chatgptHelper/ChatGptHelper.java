@@ -155,10 +155,12 @@ public class ChatGptHelper {
         String timestamp = TIMESTAMP_FORMAT.format(new Date());
         List<Card> cards = MdCardWriter.parseSource(response);
         for (Card card : cards) {
-            Path path = Path.of(outputFolder).resolve(String.format("%s_%d.md", timestamp, index.getAndIncrement()));
-            log.info(String.format("Writing card '%s' to path %s", card.getFront(), path.toAbsolutePath()));
-            println("Writing card '%s' to path %s", card.getFront(), path.toAbsolutePath().toString());
-            Files.write(path, card.getContent().getBytes(), StandardOpenOption.CREATE);
+            if (card.isParsedCorrectly()) {
+                Path path = Path.of(outputFolder).resolve(String.format("%s_%d.md", timestamp, index.getAndIncrement()));
+                log.info(String.format("Writing card '%s' to path %s", card.getFront(), path.toAbsolutePath()));
+                println("Writing card '%s' to path %s", card.getFront(), path.toAbsolutePath().toString());
+                Files.write(path, card.getContent().getBytes(), StandardOpenOption.CREATE_NEW);
+            }
         }
     }
 }

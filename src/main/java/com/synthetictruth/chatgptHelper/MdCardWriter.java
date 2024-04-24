@@ -31,17 +31,19 @@ public class MdCardWriter {
     @Getter
     static public class Card {
         public Card(String content) {
-            String[] tokens = content.split("(Front|Back):\\s*");
+            String[] tokens = content.split("\\**(Front|Back)\\**:\\s*");
             if (tokens.length == 3) {
                 this.front = tokens[1].trim();
                 this.back = tokens[2].trim();
             } else {
                 System.out.println("Cannot parse card: " + content);
+                this.isParsedCorrectly = false;
             }
         }
 
         private String front;
         private String back;
+        private boolean isParsedCorrectly = true;
 
         public String getContent() {
             return String.format("%s\n---\n%s", this.front, this.back);
