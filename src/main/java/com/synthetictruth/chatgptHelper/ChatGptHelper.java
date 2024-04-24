@@ -24,8 +24,9 @@ public class ChatGptHelper {
     private final String TYPE_CARD_PREFIX = //
             """
                     create multiple anki cards (removing the eventual cloze).
-                    The back card should have minimal information that allows for clear and concise answers.
+                    Each card should identify small and clear items in the content, that is clear and testable. 
                     Don't add information on how to create Anki cards in general.
+                    Prefix the two card sides with "Front:" and "Back:"
                     Use a --- separator to separate the cards.
                     Here's the content to be turned into cards:
 
