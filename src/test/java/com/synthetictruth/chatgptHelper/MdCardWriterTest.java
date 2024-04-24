@@ -1,6 +1,5 @@
 package com.synthetictruth.chatgptHelper;
 
-import com.synthetictruth.chatgptHelper.MdCardWriter.Card;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -15,7 +14,7 @@ class MdCardWriterTest {
                 Back: this is the back
                 """;
 
-        List<Card> cards = MdCardWriter.parseSource(content);
+        List<Card> cards = Card.parseSource(content);
         assertEquals(1, cards.size());
         Card card = cards.get(0);
         assertEquals("this is the front", card.getFront());
@@ -29,7 +28,7 @@ class MdCardWriterTest {
                 **Back**: this is the back
                 """;
 
-        List<Card> cards = MdCardWriter.parseSource(content);
+        List<Card> cards = Card.parseSource(content);
         assertEquals(1, cards.size());
         Card card = cards.get(0);
         assertEquals("this is the front", card.getFront());

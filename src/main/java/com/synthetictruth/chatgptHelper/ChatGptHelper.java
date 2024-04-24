@@ -5,7 +5,7 @@ import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.google.gson.Gson;
 import com.synthetictruth.chatgptHelper.ChatGptCompletion.Choice;
-import com.synthetictruth.chatgptHelper.MdCardWriter.Card;
+import com.synthetictruth.chatgptHelper.Card;
 import lombok.extern.java.Log;
 import okhttp3.*;
 
@@ -153,7 +153,7 @@ public class ChatGptHelper {
         // split the response into multiple files
         AtomicInteger index = new AtomicInteger(1);
         String timestamp = TIMESTAMP_FORMAT.format(new Date());
-        List<Card> cards = MdCardWriter.parseSource(response);
+        List<Card> cards = Card.parseSource(response);
         for (Card card : cards) {
             if (card.isParsedCorrectly()) {
                 Path path = Path.of(outputFolder).resolve(String.format("%s_%d.md", timestamp, index.getAndIncrement()));
