@@ -1,11 +1,13 @@
 package com.synthetictruth.chatgptHelper;
 
 import lombok.Getter;
+import lombok.extern.java.Log;
 
 import java.util.Arrays;
 import java.util.List;
 
 @Getter
+@Log
 public class Card {
     public Card(String content) {
         String[] tokens = content.split("\\**(Front|Back)\\**:\\s*");
@@ -13,7 +15,7 @@ public class Card {
             this.front = tokens[1].trim();
             this.back = tokens[2].trim();
         } else {
-            System.out.println("Cannot parse card: " + content);
+            log.severe("Cannot parse card: " + content);
             this.isParsedCorrectly = false;
         }
     }

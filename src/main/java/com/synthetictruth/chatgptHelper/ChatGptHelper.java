@@ -5,7 +5,6 @@ import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.google.gson.Gson;
 import com.synthetictruth.chatgptHelper.ChatGptCompletion.Choice;
-import com.synthetictruth.chatgptHelper.Card;
 import lombok.extern.java.Log;
 import okhttp3.*;
 
@@ -30,6 +29,7 @@ public class ChatGptHelper {
                     Use a --- separator to separate the cards.
                     Here's the content to be turned into cards:
 
+                    %s
                     """;
     private final String KEY_ENV_VARIABLE = "OPENAI_API_KEY";
 
@@ -94,29 +94,37 @@ public class ChatGptHelper {
     }
 
     private void run() throws Exception {
-        OkHttpClient client = new OkHttpClient();
-
-        String apiKey = System.getenv(KEY_ENV_VARIABLE);
-        MediaType mediaType = MediaType.parse("application/json");
-        String prompt;
+        String inputText;
 
         if (inputPrompt != null) {
-            prompt = inputPrompt;
+            inputText = inputPrompt;
         } else if (inputFile != null) {
-            prompt = Files.readString(Path.of(inputFile));
+            inputText = Files.readString(Path.of(inputFile));
         } else {
-            prompt = "";
+            inputText = "";
         }
 
-        prompt = String.format("%s %s", TYPE_CARD_PREFIX, prompt);
+        Prompt prompt = new Prompt(inputText, TYPE_CARD_PREFIX);
 
-        System.out.printf("Prompt: %s\n", prompt);
+        System.out.printf("Prompt: %s\n", prompt.getContent());
 
+        String responseText = callChatGpt(prompt.getContent());
+
+        if (responseText != null) {
+            processResponse(responseText, prompt.getSource());
+        }
+    }
+
+    private String callChatGpt(final String inputText) {
+        OkHttpClient client = new OkHttpClient();
+        String apiKey = System.getenv(KEY_ENV_VARIABLE);
+        MediaType mediaType = MediaType.parse("application/json");
+        String responseText = null;
         ChatGptRequest chatGptRequest = ChatGptRequest.builder()
                 .model(MODEL)
                 .temperature(0.5)
                 .max_tokens(MAX_TOKENS)
-                .message(new ChatGptRequest.UserMessage(prompt))
+                .message(new ChatGptRequest.UserMessage(inputText))
                 .build();
         Gson gson = new Gson();
 
@@ -136,14 +144,15 @@ public class ChatGptHelper {
             ChatGptCompletion val = ChatGptCompletion.fromString(responseBody);
             Optional<Choice> reply = val.getChoices().stream().findFirst();
             if (reply.isPresent()) {
-                processResponse(reply.get().getMessage().content);
+                responseText = reply.get().getMessage().content;
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        return responseText;
     }
 
-    private void processResponse(String response) throws IOException {
+    private void processResponse(String response, String source) throws IOException {
         // write out the file with the multiple answers
         Files.write(Path.of(outputFile),
                 response.getBytes(),
@@ -151,6 +160,11 @@ public class ChatGptHelper {
         println("output written to file %s", outputFile);
 
         // split the response into multiple files
+        String sourceTag = "";
+        if (source != null) {
+            sourceTag = String.format("\n\n#src-%s", source.toLowerCase().replace(" ", "_"));
+        }
+
         AtomicInteger index = new AtomicInteger(1);
         String timestamp = TIMESTAMP_FORMAT.format(new Date());
         List<Card> cards = Card.parseSource(response);
@@ -159,7 +173,8 @@ public class ChatGptHelper {
                 Path path = Path.of(outputFolder).resolve(String.format("%s_%d.md", timestamp, index.getAndIncrement()));
                 log.info(String.format("Writing card '%s' to path %s", card.getFront(), path.toAbsolutePath()));
                 println("Writing card '%s' to path %s", card.getFront(), path.toAbsolutePath().toString());
-                Files.write(path, card.getContent().getBytes(), StandardOpenOption.CREATE_NEW);
+                String cardContent = String.format("%s%s", card.getContent(), sourceTag);
+                Files.write(path, cardContent.getBytes(), StandardOpenOption.CREATE_NEW);
             }
         }
     }
