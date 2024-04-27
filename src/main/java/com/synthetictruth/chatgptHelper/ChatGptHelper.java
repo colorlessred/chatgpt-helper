@@ -9,6 +9,8 @@ import lombok.extern.java.Log;
 import okhttp3.*;
 
 import java.io.IOException;
+import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -21,28 +23,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Log
 public class ChatGptHelper {
 
-    private final String TYPE_CARD_PREFIX = //
-            """
-                    create multiple anki cards (removing the eventual cloze).
-                    Each card should identify small and clear items in the content, that is clear and testable. 
-                    Don't add information on how to create Anki cards in general.
-                    Prefix the two card sides with "Front:" and "Back:"
-                    Use a --- separator to separate the cards.
-                    Here's the content to be turned into cards:
-
-                    %s
-                    """;
-    private final String KEY_ENV_VARIABLE = "OPENAI_API_KEY";
-
-    // from https://platform.openai.com/docs/quickstart?context=curl
-    private final String OPEN_AI_API_URL = "https://api.openai.com/v1/chat/completions";
+    public static final int MAX_API_TRIES = 5;
 
     // see models and pricing: https://openai.com/pricing
+    private final String KEY_ENV_VARIABLE = "OPENAI_API_KEY";
 
-    private final int MAX_TOKENS = 1000;
     private final String MODEL_GPT4 = "gpt-4-turbo-preview";
+    private final int MAX_TOKENS = 1000;
+
     private final String MODEL_GPT3 = "gpt-3.5-turbo-0125";
-    private final String MODEL = MODEL_GPT4;
 
     private final SimpleDateFormat TIMESTAMP_FORMAT = new SimpleDateFormat("yyyyMMdd_HHmmss");
 
@@ -86,12 +75,12 @@ public class ChatGptHelper {
         }
     }
 
-    private void println(String message) {
+    private void println(final String message) {
         log.info(message);
     }
 
     private void println(String format, String... values) {
-        log.info(String.format(format, values));
+        log.info(String.format(format, (Object) values));
     }
 
     private void run() throws Exception {
@@ -105,6 +94,17 @@ public class ChatGptHelper {
             inputText = "";
         }
 
+        //
+        String TYPE_CARD_PREFIX = """
+                create multiple anki cards (removing the eventual cloze).
+                Each card should identify small and clear items in the content, that is clear and testable. 
+                Don't add information on how to create Anki cards in general.
+                Prefix the two card sides with "Front:" and "Back:"
+                Use a --- separator to separate the cards.
+                Here's the content to be turned into cards:
+
+                %s
+                """;
         Prompt prompt = new Prompt(inputText, TYPE_CARD_PREFIX);
 
         System.out.printf("Prompt: %s\n", prompt.getContent());
@@ -121,8 +121,9 @@ public class ChatGptHelper {
         String apiKey = System.getenv(KEY_ENV_VARIABLE);
         MediaType mediaType = MediaType.parse("application/json");
         String responseText = null;
+
         ChatGptRequest chatGptRequest = ChatGptRequest.builder()
-                .model(MODEL)
+                .model(MODEL_GPT4)
                 .temperature(0.5)
                 .max_tokens(MAX_TOKENS)
                 .message(new ChatGptRequest.UserMessage(inputText))
@@ -131,6 +132,8 @@ public class ChatGptHelper {
 
         RequestBody body = RequestBody.create(gson.toJson(chatGptRequest), mediaType);
 
+        // from https://platform.openai.com/docs/quickstart?context=curl
+        String OPEN_AI_API_URL = "https://api.openai.com/v1/chat/completions";
         Request request = new Request.Builder()
                 .url(OPEN_AI_API_URL)
                 .post(body)
@@ -139,16 +142,27 @@ public class ChatGptHelper {
                 .build();
 
         println("Calling the ChatGTP API");
-        try (Response response = client.newCall(request).execute()) {
-            String responseBody = response.body().string();
-            System.out.println(responseBody);
-            ChatGptCompletion val = ChatGptCompletion.fromString(responseBody);
-            Optional<Choice> reply = val.getChoices().stream().findFirst();
-            if (reply.isPresent()) {
-                responseText = reply.get().getMessage().content;
+        try {
+            int numTry = 0;
+            boolean success = false;
+            while (numTry < MAX_API_TRIES && !success) {
+                try (Response response = client.newCall(request).execute()) {
+                    final ResponseBody rBody = response.body();
+                    String responseBody = (rBody != null) ? rBody.string() : "";
+                    System.out.println(responseBody);
+                    ChatGptCompletion val = ChatGptCompletion.fromString(responseBody);
+                    Optional<Choice> reply = val.getChoices().stream().findFirst();
+                    if (reply.isPresent()) {
+                        responseText = reply.get().getMessage().content;
+                    }
+                    success = true;
+                } catch (SocketTimeoutException e) {
+                    numTry++;
+                    log.severe(String.format("timeout! %d out of %d", numTry, MAX_API_TRIES));
+                }
             }
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Exception calling the ChatGPT API", e);
         }
         return responseText;
     }
@@ -156,14 +170,15 @@ public class ChatGptHelper {
     private void processResponse(String response, String source) throws IOException {
         // write out the file with the multiple answers
         Files.write(Path.of(outputFile),
-                response.getBytes(),
+                List.of(response),
+                StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE);
         println("output written to file %s", outputFile);
 
         // split the response into multiple files
         String sourceTag = "";
         if (source != null) {
-            sourceTag = String.format("\n\n#src-%s", source.toLowerCase().replace(" ", "_"));
+            sourceTag = String.format("#src_%s", source.toLowerCase().replace(" ", "_"));
         }
 
         AtomicInteger index = new AtomicInteger(1);
@@ -174,8 +189,8 @@ public class ChatGptHelper {
                 Path path = Path.of(outputFolder).resolve(String.format("%s_%d.md", timestamp, index.getAndIncrement()));
                 log.info(String.format("Writing card '%s' to path %s", card.getFront(), path.toAbsolutePath()));
                 println("Writing card '%s' to path %s", card.getFront(), path.toAbsolutePath().toString());
-                String cardContent = String.format("%s%s", card.getContent(), sourceTag);
-                Files.write(path, cardContent.getBytes(), StandardOpenOption.CREATE_NEW);
+                String cardContent = String.format("%s\n%s", sourceTag, card.getContent()).trim();
+                Files.write(path, List.of(cardContent), StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
             }
         }
     }
