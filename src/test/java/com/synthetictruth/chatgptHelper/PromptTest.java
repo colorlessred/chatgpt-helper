@@ -10,7 +10,7 @@ class PromptTest {
         Prompt prompt = new Prompt("something\\nsecond line\\n\\n-- this is my, source", "prefix: %s");
 
         assertTrue(prompt.isHasSource());
-        assertEquals("this_is_my_source", prompt.getSource());
+        assertEquals("this is my, source", prompt.getSource());
         assertEquals("prefix: something\\nsecond line\\n\\n", prompt.getContent());
     }
 }

@@ -2,8 +2,6 @@ package com.synthetictruth.chatgptHelper;
 
 import lombok.Getter;
 
-import java.util.Locale;
-
 @Getter
 public class Prompt {
     private String content;
@@ -17,7 +15,7 @@ public class Prompt {
 
         if (tokens.length > 1) {
             this.hasSource = true;
-            this.source = tokens[1].toLowerCase(Locale.ROOT).replaceAll("\\W+", "_");
+            this.source = tokens[1];
         }
     }
 }

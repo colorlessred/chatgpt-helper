@@ -15,9 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Log
@@ -26,14 +24,16 @@ public class ChatGptHelper {
     public static final int MAX_API_TRIES = 5;
 
     // see models and pricing: https://openai.com/pricing
-    private final String KEY_ENV_VARIABLE = "OPENAI_API_KEY";
+    private static final String KEY_ENV_VARIABLE = "OPENAI_API_KEY";
 
-    private final String MODEL_GPT4 = "gpt-4-turbo-preview";
-    private final int MAX_TOKENS = 1000;
+    private static final String MODEL_GPT4 = "gpt-4-turbo-preview";
+    private static final int MAX_TOKENS = 1000;
 
-    private final String MODEL_GPT3 = "gpt-3.5-turbo-0125";
+    private static final String MODEL_GPT3 = "gpt-3.5-turbo-0125";
 
-    private final SimpleDateFormat TIMESTAMP_FORMAT = new SimpleDateFormat("yyyyMMdd_HHmmss");
+    private static final SimpleDateFormat TIMESTAMP_FORMAT = new SimpleDateFormat("yyyyMMdd_HHmmss");
+
+    private static final Set<String> AVOID_TERMS = Set.of("www", "com", "http", "https");
 
     @Parameter(names = {"-t", "--type"})
     private String type;
@@ -49,6 +49,7 @@ public class ChatGptHelper {
 
     @Parameter(names = {"-f", "--outputFolder"})
     private String outputFolder;
+
 
     public static void main(String[] args) {
         ChatGptHelper chatGptHelper = new ChatGptHelper();
@@ -167,6 +168,29 @@ public class ChatGptHelper {
         return responseText;
     }
 
+    /**
+     * keep only the unique terms to make the tag shorter
+     *
+     * @param src
+     * @return
+     */
+    public static String computeTag(String src) {
+        if (src == null) {
+            return "";
+        }
+
+        List<String> tokens = Arrays.stream(src.toLowerCase().split("\\W+")).toList();
+        Set<String> uniqueTokens = new HashSet<>();
+        List<String> cleanTokens = new ArrayList<>();
+        for (String token : tokens) {
+            if (!AVOID_TERMS.contains(token) && !uniqueTokens.contains(token)) {
+                uniqueTokens.add(token);
+                cleanTokens.add(token);
+            }
+        }
+        return "#src_" + String.join("_", cleanTokens);
+    }
+
     private void processResponse(String response, String source) throws IOException {
         // write out the file with the multiple answers
         Files.write(Path.of(outputFile),
@@ -176,10 +200,7 @@ public class ChatGptHelper {
         println("output written to file %s", outputFile);
 
         // split the response into multiple files
-        String sourceTag = "";
-        if (source != null) {
-            sourceTag = String.format("#src_%s", source.toLowerCase().replace(" ", "_"));
-        }
+        String sourceTag = computeTag(source);
 
         AtomicInteger index = new AtomicInteger(1);
         String timestamp = TIMESTAMP_FORMAT.format(new Date());
@@ -188,7 +209,7 @@ public class ChatGptHelper {
             if (card.isParsedCorrectly()) {
                 Path path = Path.of(outputFolder).resolve(String.format("%s_%d.md", timestamp, index.getAndIncrement()));
                 log.info(String.format("Writing card '%s' to path %s", card.getFront(), path.toAbsolutePath()));
-                println("Writing card '%s' to path %s", card.getFront(), path.toAbsolutePath().toString());
+                println("Writing card to path %s", path.toAbsolutePath().toString());
                 String cardContent = String.format("%s\n%s", sourceTag, card.getContent()).trim();
                 Files.write(path, List.of(cardContent), StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
             }
