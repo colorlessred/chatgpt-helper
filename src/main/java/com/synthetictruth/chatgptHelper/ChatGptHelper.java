@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Log
@@ -118,7 +119,12 @@ public class ChatGptHelper {
     }
 
     private String callChatGpt(final String inputText) {
-        OkHttpClient client = new OkHttpClient();
+        OkHttpClient client = new OkHttpClient.Builder().
+                connectTimeout(30, TimeUnit.SECONDS)  // Set the connection timeout
+                .readTimeout(30, TimeUnit.SECONDS)     // Set the read timeout
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .build();
+
         String apiKey = System.getenv(KEY_ENV_VARIABLE);
         MediaType mediaType = MediaType.parse("application/json");
         String responseText = null;
