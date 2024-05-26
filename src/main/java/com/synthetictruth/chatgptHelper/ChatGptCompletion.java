@@ -17,6 +17,12 @@ public class ChatGptCompletion {
     String id;
     @Getter
     List<Choice> choices;
+    @Getter
+    private ChatGptError error;
+
+    public boolean hasError() {
+        return this.error != null;
+    }
 
     public static ChatGptCompletion fromString(String completion) {
         Gson gson = new Gson();

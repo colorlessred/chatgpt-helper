@@ -24,13 +24,23 @@ public class ChatGptHelper {
 
     public static final int MAX_API_TRIES = 5;
 
-    // see models and pricing: https://openai.com/pricing
+    // env variable that must hold the OPENAI API Key
     private static final String KEY_ENV_VARIABLE = "OPENAI_API_KEY";
 
-    private static final String MODEL_GPT4 = "gpt-4-turbo-preview";
-    private static final int MAX_TOKENS = 1000;
+    // see models and pricing: https://openai.com/pricing
+    private enum Models {
+        GPT4O("gpt-4o-2024-05-13"),
+        GPT4("gpt-4-turbo-preview"),
+        GPT3("gpt-3.5-turbo-0125");
 
-    private static final String MODEL_GPT3 = "gpt-3.5-turbo-0125";
+        Models(String code) {
+            this.code = code;
+        }
+
+        final String code;
+    }
+
+    private static final int MAX_TOKENS = 4096;
 
     private static final SimpleDateFormat TIMESTAMP_FORMAT = new SimpleDateFormat("yyyyMMdd_HHmmss");
 
@@ -53,6 +63,7 @@ public class ChatGptHelper {
 
 
     public static void main(String[] args) {
+        LoggingConfig.configureLogging();
         ChatGptHelper chatGptHelper = new ChatGptHelper();
         JCommander.newBuilder().addObject(chatGptHelper).build().parse(args);
         try {
@@ -130,7 +141,7 @@ public class ChatGptHelper {
         String responseText = null;
 
         ChatGptRequest chatGptRequest = ChatGptRequest.builder()
-                .model(MODEL_GPT4)
+                .model(Models.GPT4O.code)
                 .temperature(0.5)
                 .max_tokens(MAX_TOKENS)
                 .message(new ChatGptRequest.UserMessage(inputText))
@@ -153,18 +164,27 @@ public class ChatGptHelper {
             int numTry = 0;
             boolean success = false;
             while (numTry < MAX_API_TRIES && !success) {
+                numTry++;
                 try (Response response = client.newCall(request).execute()) {
                     final ResponseBody rBody = response.body();
                     String responseBody = (rBody != null) ? rBody.string() : "";
                     System.out.println(responseBody);
                     ChatGptCompletion val = ChatGptCompletion.fromString(responseBody);
-                    Optional<Choice> reply = val.getChoices().stream().findFirst();
-                    if (reply.isPresent()) {
-                        responseText = reply.get().getMessage().content;
+
+                    if (val.hasError()) {
+                        throw new RuntimeException(String.format("Error: %s", val.getError().getMessage()));
+                    } else {
+                        List<Choice> choices = val.getChoices();
+
+                        if (choices != null) {
+                            Optional<Choice> reply = choices.stream().findFirst();
+                            if (reply.isPresent()) {
+                                responseText = reply.get().getMessage().content;
+                                success = true;
+                            }
+                        }
                     }
-                    success = true;
                 } catch (SocketTimeoutException e) {
-                    numTry++;
                     log.severe(String.format("timeout! %d out of %d", numTry, MAX_API_TRIES));
                 }
             }
@@ -215,7 +235,6 @@ public class ChatGptHelper {
             if (card.isParsedCorrectly()) {
                 Path path = Path.of(outputFolder).resolve(String.format("%s_%d.md", timestamp, index.getAndIncrement()));
                 log.info(String.format("Writing card '%s' to path %s", card.getFront(), path.toAbsolutePath()));
-                println("Writing card to path %s", path.toAbsolutePath().toString());
                 String cardContent = String.format("%s\n%s", sourceTag, card.getContent()).trim();
                 Files.write(path, List.of(cardContent), StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
             }
