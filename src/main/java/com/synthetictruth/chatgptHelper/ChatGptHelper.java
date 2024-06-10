@@ -137,6 +137,12 @@ public class ChatGptHelper {
                 .build();
 
         String apiKey = System.getenv(KEY_ENV_VARIABLE);
+
+        if (apiKey == null) {
+            log.severe("ChatGPT key not found. Use the env variable " + KEY_ENV_VARIABLE);
+            throw new RuntimeException("key not found");
+        }
+
         MediaType mediaType = MediaType.parse("application/json");
         String responseText = null;
 
