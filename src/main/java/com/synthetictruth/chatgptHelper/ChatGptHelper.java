@@ -237,10 +237,12 @@ public class ChatGptHelper {
         AtomicInteger index = new AtomicInteger(1);
         String timestamp = TIMESTAMP_FORMAT.format(new Date());
         List<Card> cards = Card.parseSource(response);
+        int num = 0;
         for (Card card : cards) {
             if (card.isParsedCorrectly()) {
+                num++;
                 Path path = Path.of(outputFolder).resolve(String.format("%s_%d.md", timestamp, index.getAndIncrement()));
-                log.info(String.format("Writing card '%s' to path %s", card.getFront(), path.toAbsolutePath()));
+                log.info(String.format("%d) Writing card '%s' to path %s", num, card.getFront(), path.toAbsolutePath()));
                 String cardContent = String.format("%s\n%s", sourceTag, card.getContent()).trim();
                 Files.write(path, List.of(cardContent), StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
             }
