@@ -44,7 +44,7 @@ public class ChatGptHelper {
 
     private static final SimpleDateFormat TIMESTAMP_FORMAT = new SimpleDateFormat("yyyyMMdd_HHmmss");
 
-    private static final Set<String> AVOID_TERMS = Set.of("www", "com", "http", "https");
+    private static final Set<String> AVOID_TERMS = Set.of("www", "com", "http", "https", "undefined");
 
     @Parameter(names = {"-t", "--type"})
     private String type;
